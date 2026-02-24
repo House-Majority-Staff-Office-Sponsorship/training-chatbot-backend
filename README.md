@@ -38,27 +38,6 @@ Invokes a multi-agent deep research pipeline inspired by Google's Agent Developm
 | `subQueries` | Sub-queries issued against the RAG corpus |
 | `groundingMetadata` | Per-sub-query grounding/source metadata from Vertex AI RAG (entry may be `null`) |
 
----
-
-### `POST /api/chat`
-
-**Request body** (JSON):
-
-```json
-{ "query": "What is the onboarding process for new staff?" }
-```
-
-**Successful response** (`200 OK`):
-
-```json
-{
-  "answer": "The onboarding process ...",
-  "groundingMetadata": { ... }
-}
-```
-
-`groundingMetadata` contains source citations returned by the Vertex AI RAG engine (may be `null` if no metadata was returned).
-
 **Error responses**:
 
 | Status | Meaning |
@@ -77,7 +56,6 @@ Copy `.env.example` to `.env.local` (local dev) or add them in the Vercel projec
 |----------|----------|-------------|
 | `GCP_PROJECT` | ✅ | Google Cloud project ID |
 | `GCP_LOCATION` | | Vertex AI region (default: `us-central1`) |
-| `GEMINI_MODEL` | | Gemini model for `/api/chat` (default: `gemini-1.5-pro`) |
 | `GEN_FAST_MODEL` | | Fast model for IntentExtractor agent (default: `gemini-2.0-flash`) |
 | `GEN_ADVANCED_MODEL` | | Advanced model for RagRetriever & Synthesizer agents (default: `gemini-2.5-pro`) |
 | `RAG_CORPUS` | ✅ | Full Vertex AI RAG corpus resource name |
@@ -95,7 +73,6 @@ npm run dev
 
 Both endpoints will be available at:
 - `http://localhost:3000/api/research` (deep research agent)
-- `http://localhost:3000/api/chat` (simple RAG chat)
 
 ## Deployment
 
