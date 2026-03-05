@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { runDeepResearch } from "@/app/lib/agents/orchestrator";
+import { runDeepResearch } from "@/app/lib/agents/runner";
 
 // ---------------------------------------------------------------------------
 // Environment variables
@@ -16,6 +16,10 @@ const GEN_ADVANCED_MODEL =
   "gemini-2.5-pro";
 // Full resource name: projects/<project>/locations/<loc>/ragCorpora/<id>
 const RAG_CORPUS = process.env.RAG_CORPUS ?? "";
+// Max iterations for the evaluator + hunter squad refinement loop
+const MAX_REFINEMENT_ITERATIONS = Number(
+  process.env.MAX_REFINEMENT_ITERATIONS ?? "2"
+);
 // Optional: comma-separated list of allowed origins for CORS
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS ?? "*")
   .split(",")
@@ -48,13 +52,15 @@ export async function OPTIONS(req: NextRequest) {
 // ---------------------------------------------------------------------------
 // POST /api/research
 //
-// Triggers the full deep research pipeline:
-//   1. IntentExtractor  – decomposes query into sub-queries (fast model)
-//   2. RagRetriever     – queries RAG corpus per sub-query in parallel
-//   3. Synthesizer      – merges all findings into one coherent answer
+// Triggers the full deep research pipeline (ADK multi-squad architecture):
+//   1. PlanGenerator     – creates a research plan
+//   2. SectionPlanner    – structures the report outline
+//   3. ResearchSquad     – parallel RAG researchers (broad + deep-dive)
+//   4. RefinementLoop    – evaluator + hunter squad iterate until quality passes
+//   5. ReportComposer    – synthesizes findings into a polished report
 //
 // Body:    { query: string }
-// Returns: { answer: string, subQueries: string[], groundingMetadata: any[] }
+// Returns: { answer, researchPlan, reportSections, broadFindings, deepDiveFindings, evaluation }
 // ---------------------------------------------------------------------------
 export async function POST(req: NextRequest) {
   const origin = req.headers.get("origin");
@@ -100,6 +106,7 @@ export async function POST(req: NextRequest) {
       fastModel: GEN_FAST_MODEL,
       advancedModel: GEN_ADVANCED_MODEL,
       ragCorpus: RAG_CORPUS,
+      maxRefinementIterations: MAX_REFINEMENT_ITERATIONS,
     });
 
     return NextResponse.json(result, { status: 200, headers });
