@@ -1,6 +1,6 @@
 import "@/app/lib/gcp-auth";
 import { NextRequest, NextResponse } from "next/server";
-import { streamDeepResearch } from "@/app/lib/agents/deep-research/runner";
+import { runQuickSearch } from "@/app/lib/agents/quick-search/agent";
 import { createRateLimiter } from "@/app/lib/rate-limiter";
 import { type ConversationMessage } from "@/app/lib/types";
 
@@ -11,10 +11,8 @@ const GCP_PROJECT = process.env.GCP_PROJECT ?? "";
 const GCP_LOCATION = process.env.GCP_LOCATION ?? "us-central1";
 if (GCP_PROJECT) process.env.GOOGLE_CLOUD_PROJECT ??= GCP_PROJECT;
 if (GCP_LOCATION) process.env.GOOGLE_CLOUD_LOCATION ??= GCP_LOCATION;
-const GEN_FAST_MODEL =
-  process.env.GEN_FAST_MODEL ?? process.env.GEMINI_MODEL ?? "gemini-2.0-flash";
-const GEN_REPORT_MODEL =
-  process.env.GEN_REPORT_MODEL ?? "gemini-2.5-pro";
+const GEN_PRO_MODEL =
+  process.env.GEN_PRO_MODEL ?? process.env.GEN_REPORT_MODEL ?? "gemini-2.5-pro";
 const RAG_CORPUS = process.env.RAG_CORPUS ?? "";
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS ?? "*")
   .split(",")
@@ -50,15 +48,9 @@ export async function OPTIONS(req: NextRequest) {
 }
 
 // ---------------------------------------------------------------------------
-// POST /api/research
+// POST /api/quick-search-pro
 //
-// Returns a Server-Sent Events stream. Each event has:
-//   event: step
-//   data: { "field": "<resultKey>", "value": "<content>" }
-//
-// Final event:
-//   event: done
-//   data: {}
+// Same as /api/quick-search but uses the pro model (gemini-2.5-pro).
 // ---------------------------------------------------------------------------
 export async function POST(req: NextRequest) {
   const origin = req.headers.get("origin");
@@ -109,68 +101,23 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // If intent orchestrator provided enriched context, prepend it to the query
-  const enrichedQuery = context
-    ? `INTENT ANALYSIS (use this to guide your research — all queries relate to House Majority Staff Office):\n${context}\n\nUSER QUESTION:\n${query}`
-    : query;
+  try {
+    const result = await runQuickSearch(query, {
+      project: GCP_PROJECT,
+      location: GCP_LOCATION,
+      model: GEN_PRO_MODEL,
+      ragCorpus: RAG_CORPUS,
+      context,
+      conversationHistory,
+    });
 
-  const encoder = new TextEncoder();
-  const stream = new ReadableStream({
-    async start(controller) {
-      try {
-        const gen = streamDeepResearch(enrichedQuery, {
-          project: GCP_PROJECT,
-          location: GCP_LOCATION,
-          fastModel: GEN_FAST_MODEL,
-          advancedModel: GEN_REPORT_MODEL,
-          reportModel: GEN_REPORT_MODEL,
-          ragCorpus: RAG_CORPUS,
-          conversationHistory,
-        });
-
-        for await (const event of gen) {
-          if (event.type === "log") {
-            const payload = JSON.stringify({
-              agent: event.agent,
-              message: event.message,
-              promptTokens: event.promptTokens,
-              responseTokens: event.responseTokens,
-              totalTokens: event.totalTokens,
-              timestamp: event.timestamp,
-              ...(event.researcherIndex != null && { researcherIndex: event.researcherIndex }),
-            });
-            controller.enqueue(encoder.encode(`event: log\ndata: ${payload}\n\n`));
-          } else if (event.type === "step") {
-            const payload = JSON.stringify({ field: event.field, value: event.value });
-            controller.enqueue(encoder.encode(`event: step\ndata: ${payload}\n\n`));
-          } else if (event.type === "researchers_init") {
-            const payload = JSON.stringify({ count: event.count, labels: event.labels });
-            controller.enqueue(encoder.encode(`event: researchers_init\ndata: ${payload}\n\n`));
-          } else if (event.type === "researcher_done") {
-            const payload = JSON.stringify({ index: event.index, label: event.label, value: event.value });
-            controller.enqueue(encoder.encode(`event: researcher_done\ndata: ${payload}\n\n`));
-          }
-        }
-
-        controller.enqueue(encoder.encode(`event: done\ndata: {}\n\n`));
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : String(err);
-        console.error("[/api/research] SSE pipeline error:", message);
-        const payload = JSON.stringify({ error: "Pipeline failed.", detail: message });
-        controller.enqueue(encoder.encode(`event: error\ndata: ${payload}\n\n`));
-      } finally {
-        controller.close();
-      }
-    },
-  });
-
-  return new Response(stream, {
-    status: 200,
-    headers: {
-      ...headers,
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      Connection: "keep-alive",
-    },
-  });
+    return NextResponse.json(result, { status: 200, headers });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[/api/quick-search-pro] error:", message);
+    return NextResponse.json(
+      { error: "Failed to complete quick search (pro).", detail: message },
+      { status: 502, headers }
+    );
+  }
 }
