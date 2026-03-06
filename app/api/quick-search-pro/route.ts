@@ -27,10 +27,8 @@ const isRateLimited = createRateLimiter(20, 10_000);
 // CORS helpers
 // ---------------------------------------------------------------------------
 function isOriginAllowed(origin: string | null): boolean {
-  return (
-    ALLOWED_ORIGINS.includes("*") ||
-    (origin !== null && ALLOWED_ORIGINS.includes(origin))
-  );
+  if (origin === null) return true; // server-to-server (no Origin header)
+  return ALLOWED_ORIGINS.includes("*") || ALLOWED_ORIGINS.includes(origin);
 }
 
 function corsHeaders(origin: string | null): Record<string, string> {
