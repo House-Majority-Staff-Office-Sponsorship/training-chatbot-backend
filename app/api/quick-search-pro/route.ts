@@ -26,10 +26,15 @@ const isRateLimited = createRateLimiter(20, 10_000);
 // ---------------------------------------------------------------------------
 // CORS helpers
 // ---------------------------------------------------------------------------
-function corsHeaders(origin: string | null): Record<string, string> {
-  const allowed =
+function isOriginAllowed(origin: string | null): boolean {
+  return (
     ALLOWED_ORIGINS.includes("*") ||
-    (origin !== null && ALLOWED_ORIGINS.includes(origin));
+    (origin !== null && ALLOWED_ORIGINS.includes(origin))
+  );
+}
+
+function corsHeaders(origin: string | null): Record<string, string> {
+  const allowed = isOriginAllowed(origin);
 
   return {
     "Access-Control-Allow-Origin": allowed ? (origin ?? "*") : "",
@@ -55,6 +60,13 @@ export async function OPTIONS(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const origin = req.headers.get("origin");
   const headers = corsHeaders(origin);
+
+  if (!isOriginAllowed(origin)) {
+    return NextResponse.json(
+      { error: "Forbidden: origin not allowed." },
+      { status: 403, headers }
+    );
+  }
 
   if (isRateLimited()) {
     return NextResponse.json(
