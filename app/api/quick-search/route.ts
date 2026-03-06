@@ -17,6 +17,7 @@ const RAG_CORPUS = process.env.RAG_CORPUS ?? "";
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS ?? "*")
   .split(",")
   .map((o) => o.trim());
+const API_KEY = process.env.API_KEY ?? "";
 
 // ---------------------------------------------------------------------------
 // Rate limiter — 20 requests per 10 seconds
@@ -27,8 +28,8 @@ const isRateLimited = createRateLimiter(20, 10_000);
 // CORS helpers
 // ---------------------------------------------------------------------------
 function isOriginAllowed(origin: string | null): boolean {
-  if (origin === null) return true; // server-to-server (no Origin header)
-  return ALLOWED_ORIGINS.includes("*") || ALLOWED_ORIGINS.includes(origin);
+  if (ALLOWED_ORIGINS.includes("*") || origin === null) return true;
+  return ALLOWED_ORIGINS.includes(origin);
 }
 
 function corsHeaders(origin: string | null): Record<string, string> {
@@ -37,7 +38,7 @@ function corsHeaders(origin: string | null): Record<string, string> {
   return {
     "Access-Control-Allow-Origin": allowed ? (origin ?? "*") : "",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, x-api-key",
     "Access-Control-Max-Age": "86400",
   };
 }
@@ -67,6 +68,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       { error: "Forbidden: origin not allowed." },
       { status: 403, headers }
+    );
+  }
+
+  if (API_KEY && req.headers.get("x-api-key") !== API_KEY) {
+    return NextResponse.json(
+      { error: "Unauthorized: invalid or missing API key." },
+      { status: 401, headers }
     );
   }
 
