@@ -24,6 +24,29 @@ Intent Orchestrator (Flash)
 
 All routes accept an optional `conversationHistory` parameter for multi-turn context.
 
+## Authentication & CORS
+
+All API routes are protected with two layers:
+
+1. **CORS origin check** — Only requests from origins listed in `ALLOWED_ORIGINS` (or with no `Origin` header, i.e. same-origin/server-side) are allowed. Unauthorized origins receive a `403`.
+2. **API key** — All cross-origin requests must include a valid `x-api-key` header matching the `API_KEY` environment variable. Missing or invalid keys receive a `401`. Same-origin requests (from the built-in UI) skip this check since the key is passed from the server component.
+
+**Headers required for external consumers:**
+```
+Content-Type: application/json
+x-api-key: <your-api-key>
+```
+
+**Example:**
+```bash
+curl -X POST https://training-chatbot-backend.vercel.app/api/intent \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: your-api-key-here" \
+  -d '{"query": "test"}'
+```
+
+The frontend app (`training-chatbot-frontend`) uses a server-side proxy that reads `BACKEND_API_KEY` from its own environment and injects the `x-api-key` header before forwarding requests — the key is never exposed to the browser.
+
 ## API Routes
 
 ### Conversation History
@@ -185,7 +208,8 @@ app/
       shared-tools/
         rag-tool.ts           — Vertex AI RAG FunctionTool with token tracking
     rate-limiter.ts         — Sliding-window rate limiter
-  page.tsx                — Dev UI with mode tabs and terminal log panel
+  page.tsx                — Server component that passes API_KEY to HomeClient
+  HomeClient.tsx          — Dev UI with mode tabs and terminal log panel
 ```
 
 ## Environment Variables
@@ -200,6 +224,7 @@ Copy `.env.example` to `.env.local` and fill in your values:
 | `GEN_FAST_MODEL` | | `gemini-2.0-flash` | Flash model for intent, query analysis, researchers |
 | `GEN_REPORT_MODEL` | | `gemini-2.5-pro` | Pro model for research compiler and quick-search-pro |
 | `RAG_CORPUS` | Yes | | Full Vertex AI RAG corpus resource name |
+| `API_KEY` | Yes | | Secret key for `x-api-key` header validation |
 | `ALLOWED_ORIGINS` | | `*` | Comma-separated CORS origins |
 
 `RAG_CORPUS` format: `projects/<PROJECT>/locations/<LOCATION>/ragCorpora/<CORPUS_ID>`
