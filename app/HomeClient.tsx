@@ -47,6 +47,8 @@ const EMPTY_DEEP: DeepResult = {
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
+const BASE = process.env.NEXT_PUBLIC_BASE_PATH || "";
+
 export default function Home({ apiKey }: { apiKey: string }) {
   const apiHeaders: Record<string, string> = {
     "Content-Type": "application/json",
@@ -109,7 +111,7 @@ export default function Home({ apiKey }: { apiKey: string }) {
   const runQuickSearch = useCallback(async (q: string, context: string, pro = false) => {
     const start = Date.now();
     try {
-      const res = await fetch(pro ? "/api/quick-search-pro" : "/api/quick-search", {
+      const res = await fetch(pro ? `${BASE}/api/quick-search-pro` : `${BASE}/api/quick-search`, {
         method: "POST",
         headers: apiHeaders,
         body: JSON.stringify({ query: q, context, conversationHistory }),
@@ -143,7 +145,7 @@ export default function Home({ apiKey }: { apiKey: string }) {
   const runConversational = useCallback(async (q: string) => {
     const start = Date.now();
     try {
-      const res = await fetch("/api/conversational", {
+      const res = await fetch(`${BASE}/api/conversational`, {
         method: "POST",
         headers: apiHeaders,
         body: JSON.stringify({ query: q, conversationHistory }),
@@ -176,7 +178,7 @@ export default function Home({ apiKey }: { apiKey: string }) {
     setElapsed(null);
     setSatisfaction("escalated");
     try {
-      const res = await fetch("/api/search-escalate", {
+      const res = await fetch(`${BASE}/api/search-escalate`, {
         method: "POST",
         headers: apiHeaders,
         body: JSON.stringify({ query: q, context, previousAnswer, conversationHistory }),
@@ -207,7 +209,7 @@ export default function Home({ apiKey }: { apiKey: string }) {
     abortRef.current = controller;
 
     try {
-      const res = await fetch("/api/research", {
+      const res = await fetch(`${BASE}/api/research`, {
         method: "POST",
         headers: apiHeaders,
         body: JSON.stringify({ query: q, context, conversationHistory }),
@@ -342,7 +344,7 @@ export default function Home({ apiKey }: { apiKey: string }) {
     setIntentChecking(true);
 
     try {
-      const intentRes = await fetch("/api/intent", {
+      const intentRes = await fetch(`${BASE}/api/intent`, {
         method: "POST",
         headers: apiHeaders,
         body: JSON.stringify({ query: q, conversationHistory }),
