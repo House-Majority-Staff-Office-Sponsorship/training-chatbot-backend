@@ -68,8 +68,13 @@ export default function Home({ apiKey }: { apiKey: string }) {
     message: string;
   } | null>(null);
 
-  // Quick search state
+  // Quick search state (Flash first-pass)
   const [quickAnswer, setQuickAnswer] = useState<string | null>(null);
+
+  // Escalation flow state: Flash answer → satisfaction check → Pro
+  const [satisfaction, setSatisfaction] = useState<"pending" | "satisfied" | "escalated" | null>(null);
+  const [proAnswer, setProAnswer] = useState<string | null>(null);
+  const [escalationContext, setEscalationContext] = useState<{ query: string; context: string } | null>(null);
 
   // Deep research state
   const [deepResult, setDeepResult] = useState<DeepResult>(EMPTY_DEEP);
@@ -115,6 +120,11 @@ export default function Home({ apiKey }: { apiKey: string }) {
         setError(data.error + (data.detail ? `: ${data.detail}` : ""));
       } else {
         setQuickAnswer(data.answer);
+        // If this was a Flash first-pass (not pro), enable satisfaction check
+        if (!pro) {
+          setSatisfaction("pending");
+          setEscalationContext({ query: q, context });
+        }
         setConversationHistory((prev) => [
           ...prev,
           { role: "user", content: q },
@@ -147,6 +157,38 @@ export default function Home({ apiKey }: { apiKey: string }) {
         setConversationHistory((prev) => [
           ...prev,
           { role: "user", content: q },
+          { role: "assistant", content: data.answer },
+        ]);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setElapsed(Date.now() - start);
+      setLoading(false);
+    }
+  }, [conversationHistory]);
+
+  // ---- Escalation Search (Pro) --------------------------------------------
+  const runEscalationSearch = useCallback(async (q: string, context: string, previousAnswer: string) => {
+    const start = Date.now();
+    setLoading(true);
+    setError(null);
+    setElapsed(null);
+    setSatisfaction("escalated");
+    try {
+      const res = await fetch("/api/search-escalate", {
+        method: "POST",
+        headers: apiHeaders,
+        body: JSON.stringify({ query: q, context, previousAnswer, conversationHistory }),
+      });
+      const data = await res.json();
+      if (data.logs) addLogs(data.logs);
+      if (data.error) {
+        setError(data.error + (data.detail ? `: ${data.detail}` : ""));
+      } else {
+        setProAnswer(data.answer);
+        setConversationHistory((prev) => [
+          ...prev,
           { role: "assistant", content: data.answer },
         ]);
       }
@@ -287,6 +329,9 @@ export default function Home({ apiKey }: { apiKey: string }) {
     setError(null);
     setElapsed(null);
     setQuickAnswer(null);
+    setSatisfaction(null);
+    setProAnswer(null);
+    setEscalationContext(null);
     setDeepResult(EMPTY_DEEP);
     setCompletedSteps(new Set());
     setExpandedStep(null);
@@ -351,6 +396,9 @@ export default function Home({ apiKey }: { apiKey: string }) {
     setError(null);
     setElapsed(null);
     setQuickAnswer(null);
+    setSatisfaction(null);
+    setProAnswer(null);
+    setEscalationContext(null);
     setDeepResult(EMPTY_DEEP);
     setCompletedSteps(new Set());
     setExpandedStep(null);
@@ -655,6 +703,86 @@ export default function Home({ apiKey }: { apiKey: string }) {
           wordBreak: "break-word",
         }}>
           {quickAnswer}
+        </div>
+      )}
+
+      {/* ── Satisfaction Check ── */}
+      {satisfaction === "pending" && !loading && quickAnswer && (
+        <div style={{
+          padding: "1rem",
+          marginTop: "0.75rem",
+          backgroundColor: "#f0fdf4",
+          border: "1px solid #bbf7d0",
+          borderRadius: 6,
+          fontSize: "0.875rem",
+          lineHeight: 1.6,
+        }}>
+          <p style={{ color: "#166534", marginBottom: "0.75rem" }}>
+            Does this answer your question?
+          </p>
+          <div style={{ display: "flex", gap: "0.5rem" }}>
+            <button
+              onClick={() => setSatisfaction("satisfied")}
+              style={{
+                padding: "0.5rem 1rem",
+                fontSize: "0.8125rem",
+                fontWeight: 600,
+                color: "#fff",
+                backgroundColor: "#16a34a",
+                border: "none",
+                borderRadius: 6,
+                cursor: "pointer",
+              }}
+            >
+              Yes
+            </button>
+            <button
+              onClick={() => {
+                if (escalationContext && quickAnswer) {
+                  runEscalationSearch(escalationContext.query, escalationContext.context, quickAnswer);
+                }
+              }}
+              style={{
+                padding: "0.5rem 1rem",
+                fontSize: "0.8125rem",
+                fontWeight: 600,
+                color: "#fff",
+                backgroundColor: "#0891b2",
+                border: "none",
+                borderRadius: 6,
+                cursor: "pointer",
+              }}
+            >
+              No, search deeper
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Escalation: Pro Search in progress ── */}
+      {satisfaction === "escalated" && loading && (
+        <div style={{ padding: "1rem", marginTop: "0.75rem", textAlign: "center", color: "#0891b2", fontSize: "0.875rem" }}>
+          Searching deeper with Pro model...
+        </div>
+      )}
+
+      {/* ── Escalation: Pro Answer ── */}
+      {proAnswer && (
+        <div style={{
+          padding: "1rem",
+          marginTop: "0.75rem",
+          backgroundColor: "#fff",
+          border: "1px solid #06b6d4",
+          borderRadius: 6,
+          fontSize: "0.8125rem",
+          lineHeight: 1.6,
+          whiteSpace: "pre-wrap",
+          wordBreak: "break-word",
+        }}>
+          <div style={{ fontSize: "0.75rem", color: "#0891b2", fontWeight: 600, marginBottom: "0.5rem" }}>
+            Pro Search Result
+          </div>
+          {proAnswer}
         </div>
       )}
 

@@ -12,7 +12,7 @@ const GCP_LOCATION = process.env.GCP_LOCATION ?? "us-central1";
 if (GCP_PROJECT) process.env.GOOGLE_CLOUD_PROJECT ??= GCP_PROJECT;
 if (GCP_LOCATION) process.env.GOOGLE_CLOUD_LOCATION ??= GCP_LOCATION;
 const GEN_FAST_MODEL =
-  process.env.GEN_FAST_MODEL ?? process.env.GEMINI_MODEL ?? "gemini-2.0-flash";
+  process.env.GEN_FAST_MODEL ?? process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
 const RAG_CORPUS = process.env.RAG_CORPUS ?? "";
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS ?? "*")
   .split(",")

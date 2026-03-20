@@ -1,6 +1,6 @@
 import "@/app/lib/gcp-auth";
 import { NextRequest, NextResponse } from "next/server";
-import { streamDeepResearch } from "@/app/lib/agents/deep-research/runner";
+import { runEscalationSearch } from "@/app/lib/agents/escalation-search/agent";
 import { createRateLimiter } from "@/app/lib/rate-limiter";
 import { type ConversationMessage } from "@/app/lib/types";
 
@@ -11,10 +11,8 @@ const GCP_PROJECT = process.env.GCP_PROJECT ?? "";
 const GCP_LOCATION = process.env.GCP_LOCATION ?? "us-central1";
 if (GCP_PROJECT) process.env.GOOGLE_CLOUD_PROJECT ??= GCP_PROJECT;
 if (GCP_LOCATION) process.env.GOOGLE_CLOUD_LOCATION ??= GCP_LOCATION;
-const GEN_FAST_MODEL =
-  process.env.GEN_FAST_MODEL ?? process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
-const GEN_REPORT_MODEL =
-  process.env.GEN_REPORT_MODEL ?? "gemini-2.5-pro";
+const GEN_PRO_MODEL =
+  process.env.GEN_PRO_MODEL ?? process.env.GEN_REPORT_MODEL ?? "gemini-2.5-pro";
 const RAG_CORPUS = process.env.RAG_CORPUS ?? "";
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS ?? "*")
   .split(",")
@@ -54,15 +52,13 @@ export async function OPTIONS(req: NextRequest) {
 }
 
 // ---------------------------------------------------------------------------
-// POST /api/research
+// POST /api/search-escalate
 //
-// Returns a Server-Sent Events stream. Each event has:
-//   event: step
-//   data: { "field": "<resultKey>", "value": "<content>" }
+// Escalation endpoint: re-searches with the Pro model after the initial
+// Flash quick-search answer was not satisfactory.
 //
-// Final event:
-//   event: done
-//   data: {}
+// Body:    { query: string, previousAnswer: string, context?: string, conversationHistory?: [] }
+// Returns: { answer: string, logs: [] }
 // ---------------------------------------------------------------------------
 export async function POST(req: NextRequest) {
   const origin = req.headers.get("origin");
@@ -103,6 +99,7 @@ export async function POST(req: NextRequest) {
   }
 
   let query: string;
+  let previousAnswer: string;
   let context: string | undefined;
   let conversationHistory: ConversationMessage[] = [];
   try {
@@ -113,7 +110,14 @@ export async function POST(req: NextRequest) {
         { status: 400, headers }
       );
     }
+    if (typeof body?.previousAnswer !== "string" || body.previousAnswer.trim() === "") {
+      return NextResponse.json(
+        { error: "Request body must contain a non-empty `previousAnswer` string." },
+        { status: 400, headers }
+      );
+    }
     query = body.query.trim();
+    previousAnswer = body.previousAnswer.trim();
     if (typeof body.context === "string" && body.context.trim()) {
       context = body.context.trim();
     }
@@ -127,68 +131,24 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // If intent orchestrator provided enriched context, prepend it to the query
-  const enrichedQuery = context
-    ? `INTENT ANALYSIS (use this to guide your research — all queries relate to House Majority Staff Office):\n${context}\n\nUSER QUESTION:\n${query}`
-    : query;
+  try {
+    const result = await runEscalationSearch(query, {
+      project: GCP_PROJECT,
+      location: GCP_LOCATION,
+      model: GEN_PRO_MODEL,
+      ragCorpus: RAG_CORPUS,
+      context,
+      previousAnswer,
+      conversationHistory,
+    });
 
-  const encoder = new TextEncoder();
-  const stream = new ReadableStream({
-    async start(controller) {
-      try {
-        const gen = streamDeepResearch(enrichedQuery, {
-          project: GCP_PROJECT,
-          location: GCP_LOCATION,
-          fastModel: GEN_FAST_MODEL,
-          advancedModel: GEN_REPORT_MODEL,
-          reportModel: GEN_REPORT_MODEL,
-          ragCorpus: RAG_CORPUS,
-          conversationHistory,
-        });
-
-        for await (const event of gen) {
-          if (event.type === "log") {
-            const payload = JSON.stringify({
-              agent: event.agent,
-              message: event.message,
-              promptTokens: event.promptTokens,
-              responseTokens: event.responseTokens,
-              totalTokens: event.totalTokens,
-              timestamp: event.timestamp,
-              ...(event.researcherIndex != null && { researcherIndex: event.researcherIndex }),
-            });
-            controller.enqueue(encoder.encode(`event: log\ndata: ${payload}\n\n`));
-          } else if (event.type === "step") {
-            const payload = JSON.stringify({ field: event.field, value: event.value });
-            controller.enqueue(encoder.encode(`event: step\ndata: ${payload}\n\n`));
-          } else if (event.type === "researchers_init") {
-            const payload = JSON.stringify({ count: event.count, labels: event.labels });
-            controller.enqueue(encoder.encode(`event: researchers_init\ndata: ${payload}\n\n`));
-          } else if (event.type === "researcher_done") {
-            const payload = JSON.stringify({ index: event.index, label: event.label, value: event.value });
-            controller.enqueue(encoder.encode(`event: researcher_done\ndata: ${payload}\n\n`));
-          }
-        }
-
-        controller.enqueue(encoder.encode(`event: done\ndata: {}\n\n`));
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : String(err);
-        console.error("[/api/research] SSE pipeline error:", message);
-        const payload = JSON.stringify({ error: "Pipeline failed.", detail: message });
-        controller.enqueue(encoder.encode(`event: error\ndata: ${payload}\n\n`));
-      } finally {
-        controller.close();
-      }
-    },
-  });
-
-  return new Response(stream, {
-    status: 200,
-    headers: {
-      ...headers,
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      Connection: "keep-alive",
-    },
-  });
+    return NextResponse.json(result, { status: 200, headers });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[/api/search-escalate] error:", message);
+    return NextResponse.json(
+      { error: "Failed to complete escalation search.", detail: message },
+      { status: 502, headers }
+    );
+  }
 }
