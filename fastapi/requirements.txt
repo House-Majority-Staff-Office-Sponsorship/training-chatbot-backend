@@ -1,7 +1,7 @@
-fastapi>=0.115
-uvicorn[standard]>=0.30
-google-adk>=0.4
-google-cloud-aiplatform>=1.70
-vertexai>=1.70
-pydantic>=2.0
-python-dotenv>=1.0
+fastapi==0.128.8
+uvicorn[standard]==0.39.0
+google-adk==1.18.0
+google-cloud-aiplatform==1.142.0
+vertexai==1.70.0
+pydantic==2.12.5
+python-dotenv==1.2.1
