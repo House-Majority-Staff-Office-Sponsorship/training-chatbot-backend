@@ -85,7 +85,6 @@ export default function Page() {
       <section style={{ marginBottom: "2rem" }}>
         <h2 style={{ fontSize: "1.1rem", marginBottom: "0.5rem" }}>Allowed Origins (CORS)</h2>
         <ul style={{ fontSize: "0.875rem", paddingLeft: "1.25rem", margin: 0 }}>
-          <li><code style={{ fontSize: "0.8rem" }}>https://hmso-training.vercel.app</code></li>
           <li><code style={{ fontSize: "0.8rem" }}>https://hmso-training.ics.hawaii.edu</code></li>
           <li><code style={{ fontSize: "0.8rem" }}>http://localhost:3000</code> (development)</li>
         </ul>
