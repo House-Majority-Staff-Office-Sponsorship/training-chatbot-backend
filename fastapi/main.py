@@ -16,7 +16,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from config import ALLOWED_ORIGINS
 from middleware.auth import ApiKeyMiddleware
 from middleware.rate_limiter import RateLimiterMiddleware
-from routes import intent, conversational, quick_search, quick_search_pro, search_escalate, research
+from routes import intent, conversational, quick_search, quick_search_pro, search_escalate, research, quiz
 
 
 app = FastAPI(
@@ -44,6 +44,7 @@ app.include_router(quick_search.router)
 app.include_router(quick_search_pro.router)
 app.include_router(search_escalate.router)
 app.include_router(research.router)
+app.include_router(quiz.router)
 
 
 # ── Root — API Documentation page ───────────────────────────────────────
