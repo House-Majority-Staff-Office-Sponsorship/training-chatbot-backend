@@ -1,36 +1,21 @@
-# ── Stage 1: Install dependencies ─────────────────────────────────────────
-FROM node:22-alpine AS deps
+FROM python:3.12-slim
+
 WORKDIR /app
 
-COPY package.json package-lock.json* ./
-RUN npm ci
+# Install dependencies
+COPY fastapi/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# ── Stage 2: Build the Next.js app ───────────────────────────────────────
-FROM node:22-alpine AS builder
-WORKDIR /app
+# Copy application code
+COPY fastapi/ .
 
-COPY --from=deps /app/node_modules ./node_modules
-COPY . .
-
-RUN npm run build
-
-# ── Stage 3: Production image ────────────────────────────────────────────
-FROM node:22-alpine AS runner
-WORKDIR /app
-
-ENV NODE_ENV=production
 ENV PORT=3001
 
 # Don't run as root
-RUN addgroup --system --gid 1001 nodejs && \
-    adduser --system --uid 1001 nextjs
-
-# Copy the standalone output and static assets
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./.next/static
-
-USER nextjs
+RUN addgroup --system --gid 1001 appuser && \
+    adduser --system --uid 1001 appuser
+USER appuser
 
 EXPOSE 3001
 
-CMD ["node", "server.js"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "3001"]

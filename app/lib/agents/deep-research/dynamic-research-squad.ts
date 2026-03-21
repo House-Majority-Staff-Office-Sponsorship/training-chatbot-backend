@@ -141,7 +141,7 @@ OVERALL CONTEXT:
 ${enrichedQuery}
 
 Instructions:
-1. Formulate 3-5 targeted queries specifically about this question.
+1. Formulate 2-3 targeted queries specifically about this question.
 2. Call the retrieve_from_rag tool for EACH query.
 3. Synthesize ALL results into a comprehensive, detailed answer.
 
