@@ -8,7 +8,7 @@ import sys
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 
 # Ensure the fastapi directory is in the Python path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -430,6 +430,12 @@ updateActive();
 </script>
 </body>
 </html>"""
+
+
+# ── Catch-all — redirect unknown paths to docs ──────────────────────────
+@app.api_route("/{path:path}", methods=["GET"], include_in_schema=False)
+async def catch_all(path: str):
+    return RedirectResponse(url="/")
 
 
 if __name__ == "__main__":
