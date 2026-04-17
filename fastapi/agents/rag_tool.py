@@ -1,6 +1,11 @@
 """
 FunctionTool that wraps Vertex AI RAG retrieval.
 
+Uses `rag.retrieval_query` to return RAW retrieved chunks (not an
+LLM-synthesized summary). The LLM agent then parses embedded structured
+fields — page numbers, section IDs, policy identifiers — directly from
+the JSONL chunk text.
+
 Supports top_k and hybrid search alpha configuration.
 """
 
@@ -32,98 +37,98 @@ def create_rag_retrieval_tool(
     on_token_usage: Optional[Callable[[RagTokenUsage], None]] = None,
 ) -> FunctionTool:
     """
-    Creates a FunctionTool that queries the Vertex AI RAG corpus.
+    Creates a FunctionTool that queries the Vertex AI RAG corpus and returns
+    the raw retrieved chunks for the agent to parse and cite.
 
     Args:
         top_k: Number of top chunks to retrieve (default: 10).
         hybrid_search_alpha: Balance between semantic (0.0) and keyword (1.0) search.
             0.5 = equal weight (default). 0.0 = pure semantic. 1.0 = pure keyword.
+
+    Note:
+        `model` is accepted for signature compatibility but no longer used —
+        this tool now performs pure retrieval with no nested LLM call.
     """
 
+    del model  # retained in signature for backward compatibility with callers
+
     def retrieve_from_rag(query: str) -> dict:
-        """Queries the Vertex AI RAG corpus to retrieve grounded information for a given query.
+        """Queries the Vertex AI RAG corpus and returns the top retrieved chunks verbatim.
+        Each chunk includes its raw text (scan for embedded page numbers, section IDs,
+        policy identifiers), source_uri, source_display_name, and relevance score.
         Call this tool once for EACH sub-query you need to research."""
 
         import vertexai as vtx
-        from vertexai.generative_models import GenerativeModel, Tool as VertexTool, Content, Part
         from vertexai.preview import rag
 
         vtx.init(project=project, location=location)
 
-        # Configure RAG retrieval with top_k and hybrid search
         rag_retrieval_config = rag.RagRetrievalConfig(
             top_k=top_k,
             hybrid_search=rag.HybridSearch(alpha=hybrid_search_alpha),
         )
 
-        rag_resource = rag.VertexRagStore(
+        response = rag.retrieval_query(
+            text=query,
             rag_resources=[rag.RagResource(rag_corpus=rag_corpus)],
             rag_retrieval_config=rag_retrieval_config,
         )
 
-        retrieval = rag.Retrieval(source=rag_resource)
+        # Extract contexts — response.contexts.contexts per the SDK shape
+        contexts = []
+        raw_contexts = getattr(response, "contexts", None)
+        if raw_contexts is not None:
+            inner = getattr(raw_contexts, "contexts", None)
+            contexts = list(inner) if inner is not None else list(raw_contexts)
 
-        gen_model = GenerativeModel(
-            model_name=model,
-            tools=[VertexTool.from_retrieval(retrieval=retrieval)],
-        )
+        # Format each chunk as a clearly-delimited block so the LLM can parse
+        # embedded structured fields (page, section, policy_id, etc.) from the
+        # chunk text itself.
+        blocks: list[str] = []
+        for i, ctx in enumerate(contexts, start=1):
+            text = getattr(ctx, "text", "") or ""
+            source_uri = getattr(ctx, "source_uri", "") or ""
+            display = getattr(ctx, "source_display_name", "") or ""
+            score = getattr(ctx, "score", None)
+            distance = getattr(ctx, "distance", None)
 
-        response = gen_model.generate_content(
-            contents=[Content(role="user", parts=[Part.from_text(query)])]
-        )
+            header_parts = [f"[Chunk {i}]"]
+            if score is not None:
+                header_parts.append(f"score={score:.3f}")
+            elif distance is not None:
+                header_parts.append(f"distance={distance:.3f}")
+            if display:
+                header_parts.append(f"file={display}")
+            if source_uri and source_uri != display:
+                header_parts.append(f"uri={source_uri}")
 
-        candidate = response.candidates[0] if response.candidates else None
-        answer = candidate.content.parts[0].text if candidate and candidate.content.parts else "(no response)"
+            blocks.append(" | ".join(header_parts) + "\n" + text.strip())
 
-        # Extract token usage
-        usage = response.usage_metadata
-        rag_prompt_tokens = usage.prompt_token_count if usage else 0
-        rag_response_tokens = usage.candidates_token_count if usage else 0
-        rag_total_tokens = usage.total_token_count if usage else (rag_prompt_tokens + rag_response_tokens)
+        if blocks:
+            formatted = "\n\n---\n\n".join(blocks)
+        else:
+            formatted = "(no chunks retrieved for this query)"
 
-        # Extract source references from grounding metadata
-        sources: list[str] = []
-        grounding_metadata = getattr(candidate, "grounding_metadata", None)
-        if grounding_metadata:
-            chunks = getattr(grounding_metadata, "grounding_chunks", []) or []
-            for chunk in chunks:
-                web = getattr(chunk, "web", None)
-                retrieved = getattr(chunk, "retrieved_context", None)
-                title = ""
-                uri = ""
-                if web:
-                    title = getattr(web, "title", "") or ""
-                    uri = getattr(web, "uri", "") or ""
-                elif retrieved:
-                    title = getattr(retrieved, "title", "") or ""
-                    uri = getattr(retrieved, "uri", "") or ""
-                if title or uri:
-                    sources.append(f"{title} ({uri})" if title and uri else (title or uri))
-
-        sources_text = ""
-        if sources:
-            source_lines = [f"[{i + 1}] {s}" for i, s in enumerate(sources)]
-            sources_text = "\n\nSOURCES:\n" + "\n".join(source_lines)
-
-        # Notify caller of RAG token usage
+        # No nested LLM call — report 0 tokens but keep callback shape
+        # so timeline logging continues to function.
         if on_token_usage:
             on_token_usage(RagTokenUsage(
                 query=query,
-                prompt_tokens=rag_prompt_tokens,
-                response_tokens=rag_response_tokens,
-                total_tokens=rag_total_tokens,
+                prompt_tokens=0,
+                response_tokens=0,
+                total_tokens=0,
                 timestamp=int(time.time() * 1000),
             ))
 
         return {
             "status": "success",
             "query": query,
-            "answer": answer + sources_text,
-            "sourceCount": len(sources),
+            "answer": formatted,
+            "chunkCount": len(contexts),
             "ragTokens": {
-                "prompt": rag_prompt_tokens,
-                "response": rag_response_tokens,
-                "total": rag_total_tokens,
+                "prompt": 0,
+                "response": 0,
+                "total": 0,
             },
         }
 

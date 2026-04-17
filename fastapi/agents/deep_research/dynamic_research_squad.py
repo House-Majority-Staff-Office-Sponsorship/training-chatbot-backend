@@ -130,7 +130,7 @@ class DynamicResearchSquad(BaseAgent):
             name=safe_name,
             model=self._model,
             description=f'Researches: "{item.question}"',
-            instruction=f"""You are a focused research agent for the House Majority Staff Office training documentation system. Your job is to thoroughly research ONE specific question.
+            instruction=f"""You are a focused research agent for the House Majority Staff Office training documentation system. Your job: thoroughly research ONE specific question.
 
 QUESTION TO RESEARCH:
 {item.question}
@@ -141,29 +141,58 @@ RESEARCH GUIDANCE:
 OVERALL CONTEXT:
 {enriched_query}
 
-Instructions:
-1. Formulate 2-3 targeted queries specifically about this question.
-2. Call the retrieve_from_rag tool for EACH query.
-3. Synthesize ALL results into a comprehensive, detailed answer.
+Follow this exact three-phase process. Do not skip phases.
 
-CRITICAL — Evidence and source requirements:
-- Always include specific policy numbers, section references, or document titles when found.
-- Quote key definitions, rules, and requirements verbatim using quotation marks.
-- Cite data points, dates, thresholds, and numerical values exactly as they appear in the source.
-- If a finding lacks a specific reference, note that no source reference was found.
-- If the RAG corpus has no relevant information for this question, clearly state that.
-- The RAG tool returns a SOURCES section with each response. You MUST collect ALL source references from every RAG call.
+── PHASE 1: SEARCH PLAN ─────────────────────────────────────────────
+Before calling any tool, think through (internally — do NOT output):
+- What exactly does this one question ask? Restate the core intent.
+- What 3 distinct angles together fully cover it? Each angle becomes one sub-query.
+- The 3 sub-queries must be meaningfully different — different facets, scopes, or terminology — not rephrasings.
 
-FORMATTING:
-- Write in plain text only. No markdown, no headers, no bold, no bullet points, no special formatting.
-- Use simple numbered lists or line breaks to organize information.
-- The final report composer will handle all formatting later.
+── PHASE 2: RETRIEVAL ──────────────────────────────────────────────
+Call the retrieve_from_rag tool exactly 3 times, once per sub-query. Not 2, not 4. Exactly 3. Each call uses a different sub-query from your plan.
 
-Your response MUST end with a REFERENCES section listing ALL sources from the RAG responses, one per line:
+You MUST search. If a sub-query returns nothing useful, note the gap and move on.
+
+── PHASE 3: DRAFTING PLAN + FINDINGS ───────────────────────────────
+Before writing, think through (internally, do NOT output): what are the key facts that answer this one question, with what specifics (numbers, dates, thresholds, exceptions)? What order serves the report composer best?
+
+Then write the findings. They must be:
+- FOCUSED on this single question — not a tour of everything retrieved.
+- COMPREHENSIVE — include specifics, thresholds, exceptions, verbatim quotes of key definitions.
+- GROUNDED — every fact traceable to retrieved content. State clearly when the corpus has no relevant information.
+
+── SOURCING RULES (READ CAREFULLY) ──────────────────────────────────
+The retrieve_from_rag tool returns RAW chunks from a JSONL corpus. Each chunk is delimited and shown with a header like "[Chunk 3] | score=0.812 | file=<name>" followed by the chunk's raw text. The raw text often contains structured fields the ingestion pipeline wrote into the JSONL — look for them.
+
+You MUST parse the chunk text to extract the authoring reference. In priority order, cite:
+1. Page number (e.g., "page": 3, "pg": 3, or inline "p. 3", "Page 3") combined with the document title parsed from the chunk content — NOT the raw file name.
+2. Section / chapter / heading mentioned inside the chunk text.
+3. Policy or rule identifier quoted in the chunk (e.g., "House Rule XXIII", "§5.301", "Policy 4.2.1").
+4. Effective date, revision number, or official URL present inside the content.
+
+Only fall back to the `file=` header value when the chunk's own text contains no usable reference.
+
+Examples of what to scan FOR inside the chunk text:
+- JSON-style fields: "page": 3, "section": "Drafting Process", "document": "...", "url": "...", "date": "2024-..."
+- Inline policy identifiers (e.g., "House Rule XXIII", "Policy 4.2.1", "§5.301")
+- Section/subsection headings embedded in the text
+- Document titles mentioned inline (e.g., "Member's Handbook, Chapter 3")
+
+── FORMATTING ───────────────────────────────────────────────────────
+Plain text only. No markdown, no headers, no bold, no bullets. Use simple numbered lists or line breaks. The final report composer will handle formatting.
+
+Your response MUST end with a REFERENCES section listing every reference parsed from the chunk text, one per line. Prefer "<document title>, p. <page>" format when a page is present:
 
 REFERENCES:
-Document/source title (URI if available)
-Document/source title (URI if available)""",
+Reference parsed from chunk text (e.g., "Overview of the Legislative Process, p. 3")
+Reference parsed from chunk text
+
+── HARD RULES ───────────────────────────────────────────────────────
+- Never output your planning — plans stay internal.
+- Never reference the search process, your tools, or your limitations.
+- Quote key definitions and thresholds verbatim using quotation marks.
+- Preserve exact numbers, dates, and identifiers.""",
             tools=[rag_tool],
             output_key="question_findings",
         )
