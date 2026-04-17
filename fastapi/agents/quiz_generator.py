@@ -11,7 +11,7 @@ from google.adk.agents import LlmAgent
 
 from models import ConversationMessage, LogEntry, format_conversation_history, now_ms
 from agents.rag_tool import create_rag_retrieval_tool, RagTokenUsage
-from agents.runner_helper import run_agent_ephemeral
+from agents.runner_helper import run_agent_ephemeral, extract_usage_tokens
 
 
 QUIZ_GENERATOR_INSTRUCTION = """You are a quiz generator for the House Majority Staff Office training system. Your job: create high-quality multiple-choice questions grounded in official training documents.
@@ -142,10 +142,7 @@ async def generate_quiz(
     async for event in run_agent_ephemeral(agent, message, user_id="quiz-user", app_name="quiz_app"):
         author = event.author or "unknown"
         if author != "user":
-            usage = getattr(event, "usage_metadata", None)
-            prompt_tokens = getattr(usage, "prompt_token_count", 0) if usage else 0
-            response_tokens = getattr(usage, "candidates_token_count", 0) if usage else 0
-            total_tokens = getattr(usage, "total_token_count", 0) if usage else (prompt_tokens + response_tokens)
+            prompt_tokens, response_tokens, total_tokens = extract_usage_tokens(event)
 
             state_delta = {}
             if hasattr(event, "actions") and event.actions:

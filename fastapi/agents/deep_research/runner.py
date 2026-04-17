@@ -13,7 +13,7 @@ import time
 from typing import AsyncGenerator, Literal, TypedDict
 
 from models import ConversationMessage, format_conversation_history
-from agents.runner_helper import run_agent_ephemeral
+from agents.runner_helper import run_agent_ephemeral, extract_usage_tokens
 from agents.deep_research.pipeline import create_deep_research_agent
 
 
@@ -97,10 +97,7 @@ async def stream_deep_research(
 
     async for event in run_agent_ephemeral(agent, message, user_id="research-user", app_name="deep_research_app"):
         author = event.author or "unknown"
-        usage = getattr(event, "usage_metadata", None)
-        prompt_tokens = getattr(usage, "prompt_token_count", 0) if usage else 0
-        response_tokens = getattr(usage, "candidates_token_count", 0) if usage else 0
-        total_tokens = getattr(usage, "total_token_count", 0) if usage else (prompt_tokens + response_tokens)
+        prompt_tokens, response_tokens, total_tokens = extract_usage_tokens(event)
 
         if author != "user":
             state_delta = {}

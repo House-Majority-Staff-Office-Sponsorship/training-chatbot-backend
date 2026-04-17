@@ -5,10 +5,11 @@ Drop-in replacement for the Next.js API routes.
 
 import os
 import sys
+import traceback
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 # Ensure the fastapi directory is in the Python path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -36,6 +37,20 @@ app.add_middleware(
     allow_headers=["Content-Type", "Authorization", "x-api-key"],
     max_age=86400,
 )
+
+# ── Global exception handler — surface the real error in the response ──────
+@app.exception_handler(Exception)
+async def _surface_exception(request: Request, exc: Exception):
+    tb = traceback.format_exc()
+    print(f"[error] {request.method} {request.url.path}\n{tb}", flush=True)
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": exc.__class__.__name__,
+            "detail": str(exc),
+        },
+    )
+
 
 # ── Startup: eager-initialize Vertex auth so first real request isn't slow ──
 @app.on_event("startup")
