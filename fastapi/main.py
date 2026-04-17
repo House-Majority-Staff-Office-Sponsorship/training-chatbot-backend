@@ -13,7 +13,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 # Ensure the fastapi directory is in the Python path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from config import ALLOWED_ORIGINS
+from config import ALLOWED_ORIGINS, GCP_PROJECT, GCP_LOCATION
 from middleware.auth import ApiKeyMiddleware
 from middleware.rate_limiter import RateLimiterMiddleware
 from routes import intent, conversational, quick_search, quick_search_pro, search_escalate, research, quiz
@@ -32,10 +32,35 @@ app.add_middleware(ApiKeyMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS if "*" not in ALLOWED_ORIGINS else ["*"],
-    allow_methods=["POST", "OPTIONS"],
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization", "x-api-key"],
     max_age=86400,
 )
+
+# ── Startup: eager-initialize Vertex auth so first real request isn't slow ──
+@app.on_event("startup")
+async def _warm_vertex_ai():
+    """Resolve ADC credentials and init Vertex at boot, not on first request.
+
+    Cold-boot first request can take 10-30s because Google ADC token fetch
+    + vertexai.init() are deferred until a tool calls them. Doing it here
+    shifts that cost to container startup."""
+    try:
+        import google.auth
+        google.auth.default()  # forces ADC credential resolution
+        if GCP_PROJECT:
+            import vertexai as vtx
+            vtx.init(project=GCP_PROJECT, location=GCP_LOCATION)
+        print("[startup] Vertex AI pre-initialized", flush=True)
+    except Exception as e:
+        print(f"[startup] Vertex warmup skipped: {e}", flush=True)
+
+
+# ── Warmup endpoint (cheap, auth-exempt, pingable from the frontend) ────────
+@app.get("/api/warmup")
+async def warmup():
+    return {"status": "ok"}
+
 
 # ── Routes ───────────────────────────────────────────────────────────────
 app.include_router(intent.router)

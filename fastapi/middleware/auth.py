@@ -23,8 +23,8 @@ class ApiKeyMiddleware(BaseHTTPMiddleware):
         if request.method == "OPTIONS":
             return await call_next(request)
 
-        # Skip auth for the root docs page
-        if request.url.path == "/" or request.url.path == "":
+        # Skip auth for the root docs page and warmup ping
+        if request.url.path in ("", "/", "/api/warmup"):
             return await call_next(request)
 
         provided_key = request.headers.get("x-api-key", "")
