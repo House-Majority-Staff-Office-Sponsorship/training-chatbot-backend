@@ -182,11 +182,11 @@ Examples of what to scan FOR inside the chunk text:
 ── FORMATTING ───────────────────────────────────────────────────────
 Plain text only. No markdown, no headers, no bold, no bullets. Use simple numbered lists or line breaks. The final report composer will handle formatting.
 
-Your response MUST end with a REFERENCES section listing every reference parsed from the chunk text, one per line. Prefer "<document title>, p. <page>" format when a page is present:
+Your response MUST end with a REFERENCES section listing every reference parsed from the chunk text, one per line. Prefer "<document title>, p. <page>" format when a page is present. If the chunk text contains a URL (look for "url", "link", "href", or any http(s)://… string), append it in parentheses:
 
 REFERENCES:
 Reference parsed from chunk text (e.g., "Overview of the Legislative Process, p. 3")
-Reference parsed from chunk text
+Reference parsed from chunk text (https://example-url-from-chunk-if-present.com)
 
 ── HARD RULES ───────────────────────────────────────────────────────
 - Never output your planning — plans stay internal.

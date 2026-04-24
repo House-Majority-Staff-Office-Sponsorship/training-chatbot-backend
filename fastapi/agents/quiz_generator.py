@@ -68,7 +68,7 @@ Respond with ONLY a valid JSON object, no other text, no markdown code fences:
       "question": "The question text?",
       "options": ["Option A", "Option B", "Option C", "Option D"],
       "correct": 0,
-      "source": "Embedded reference parsed from the chunk text backing this question"
+      "source": "Embedded reference parsed from the chunk text backing this question — append URL in parentheses if the chunk contains one, e.g. 'House Rule 11.7(3) (https://capitol.hawaii.gov/...)'"
     }
   ]
 }

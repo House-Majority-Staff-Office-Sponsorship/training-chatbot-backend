@@ -58,10 +58,17 @@ def create_rag_retrieval_tool(
         policy identifiers), source_uri, source_display_name, and relevance score.
         Call this tool once for EACH sub-query you need to research."""
 
+        import re
         import vertexai as vtx
         from vertexai.preview import rag
 
-        vtx.init(project=project, location=location)
+        # The RAG corpus URI pins its own region. Models can be at `global`
+        # while the corpus lives in (e.g.) us-west1 — always init Vertex with
+        # the corpus's region for retrieval, not the model location.
+        m = re.search(r"/locations/([^/]+)/ragCorpora/", rag_corpus)
+        corpus_location = m.group(1) if m else location
+
+        vtx.init(project=project, location=corpus_location)
 
         rag_retrieval_config = rag.RagRetrievalConfig(
             top_k=top_k,

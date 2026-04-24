@@ -63,10 +63,10 @@ The final answer (and only the final answer) goes to the user. Structure:
 [Short direct answer in prose or bullets — the substance.]
 
 ## Sources
-- [Specific reference parsed from chunk text — prefer "<document title>, p. <page>" when a page is present, e.g. "Overview of the Legislative Process, p. 3"]
+- [Reference parsed from chunk text — prefer "<document title>, p. <page>" when a page is present, e.g. "Overview of the Legislative Process, p. 3". If the chunk text contains a URL (look for "url", "link", "href", or any http(s)://… string), append it in parentheses, e.g. "House Rule 11.7(3) (https://capitol.hawaii.gov/...)"]
 - [Next reference]
 
-List each distinct source once. If two chunks cite the same policy or page, list it once. If a chunk truly had no parseable reference, cite the `file=` value from its header as a last resort; never invent references.
+List each distinct source once. If two chunks cite the same policy or page, list it once. If a chunk truly had no parseable reference, cite the `file=` value from its header as a last resort; never invent references or URLs.
 
 ── HARD RULES ───────────────────────────────────────────────────────
 - Never output your planning — plans stay internal.
