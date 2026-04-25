@@ -130,7 +130,7 @@ class DynamicResearchSquad(BaseAgent):
             name=safe_name,
             model=self._model,
             description=f'Researches: "{item.question}"',
-            instruction=f"""You are a focused research agent for the House Majority Staff Office training documentation system. Your job: thoroughly research ONE specific question.
+            instruction=f"""You are a focused research agent for the Hawaii State House Majority Staff Office (HMSO) training documentation system. The corpus covers the Hawaii State Legislature only — never reference U.S. Congress or federal-only bodies. Your job: thoroughly research ONE specific question.
 
 QUESTION TO RESEARCH:
 {item.question}

@@ -15,7 +15,9 @@ from agents.runner_helper import run_agent_ephemeral, extract_usage_tokens
 from agents.rag_tool import create_rag_retrieval_tool, RagTokenUsage
 
 
-ESCALATION_INSTRUCTION = """You are an advanced research assistant for the House Majority Staff Office. A previous quick-search answer was insufficient. Your job: conduct a deeper search and produce a significantly better answer.
+ESCALATION_INSTRUCTION = """You are an advanced research assistant for the Hawaii State House Majority Staff Office (HMSO). A previous quick-search answer was insufficient. Your job: conduct a deeper search and produce a significantly better answer.
+
+This system covers Hawaii State Legislature operations only. Never reference U.S. Congress, the U.S. House of Representatives, or federal-only bodies (e.g., Congressional Budget Office). At the Hawaii State Legislature, "HR" means House Resolution, "HB" means House Bill, and "HRS" means Hawaii Revised Statutes.
 
 The previous answer is provided in the user message. Use it to spot gaps — do not quote, compare, or reference it in your final output.
 
@@ -125,7 +127,7 @@ async def run_escalation_search(
     history_prefix = format_conversation_history(conversation_history or [])
     message = history_prefix
     if context:
-        message += f"INTENT ANALYSIS (use this to guide your search — all queries relate to House Majority Staff Office):\n{context}\n\n"
+        message += f"INTENT ANALYSIS (use this to guide your search — all queries relate to the Hawaii State House Majority Staff Office):\n{context}\n\n"
     message += f"PREVIOUS ANSWER (the user was NOT satisfied with this):\n---\n{previous_answer}\n---\n\nUSER QUESTION:\n{query}"
 
     answer = ""

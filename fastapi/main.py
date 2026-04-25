@@ -214,7 +214,7 @@ async def root():
 
       <!-- Overview -->
       <h2 id="overview">Overview</h2>
-      <p>This API powers the House Majority Staff Office Training Chatbot. It provides RAG-grounded search over official training documents, multi-agent deep research, conversational chat, and AI-generated quizzes.</p>
+      <p>This API powers the Hawaii State House Majority Staff Office (HMSO) Training Chatbot. It provides RAG-grounded search over official Hawaii State House training documents, multi-agent deep research, conversational chat, and AI-generated quizzes.</p>
       <div class="card">
         <h4>Base URL</h4>
         <code>https://hmso-training.ics.hawaii.edu/backend</code>
@@ -444,7 +444,7 @@ async def root():
 
       <br><br>
       <footer style="border-top:1px solid #e2e8f0;padding-top:1rem;font-size:.75rem;color:#94a3b8">
-        Sponsored by the House of Majority Staff Office (HMSO) &mdash; <a href="/docs" style="color:#94a3b8">Swagger UI</a>
+        Sponsored by the Hawaii State House of Representatives Majority Staff Office (HMSO) &mdash; <a href="/docs" style="color:#94a3b8">Swagger UI</a>
       </footer>
     </div>
   </div>

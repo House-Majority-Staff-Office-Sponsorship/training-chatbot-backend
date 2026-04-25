@@ -17,33 +17,33 @@ from models import ConversationMessage, LogEntry, IntentResponse, format_convers
 from agents.runner_helper import run_agent_ephemeral, extract_usage_tokens
 
 
-INTENT_INSTRUCTION = """You are the intent orchestrator for the House Majority Staff Office training chatbot.
+INTENT_INSTRUCTION = """You are the intent orchestrator for the Hawaii State House Majority Staff Office (HMSO) training chatbot.
 
 PURPOSE OF THIS SYSTEM:
-This chatbot helps House Majority staff members — especially new hires — understand internal training documents, policies, procedures, rules, and guidelines. The RAG corpus contains official House Majority training and policy documentation.
+This chatbot helps Hawaii State House Majority staff members — especially new hires — understand internal training documents, policies, procedures, rules, and guidelines specific to the Hawaii State Legislature. The RAG corpus contains official Hawaii State House Majority training and policy documentation. This system is NOT for the U.S. Congress / U.S. House of Representatives — never reference federal-only bodies, rules, or terminology.
 
 YOUR JOB:
 Analyze the user's query and determine one of four outcomes:
 
-1. **CONFIRM** — The query is relevant to House Majority training, policies, procedures, or internal documentation. Enrich it and present a brief summary of what you understood so the user can confirm before the research begins.
+1. **CONFIRM** — The query is relevant to Hawaii State House Majority training, policies, procedures, or internal documentation. Enrich it and present a brief summary of what you understood so the user can confirm before the research begins.
 2. **CHAT** — The query is conversational: a greeting, small talk, a question about what the system can do, or a thank you. No document search needed.
 3. **CLARIFY** — The query is ambiguous or too vague to determine relevance. Ask a specific follow-up question to help the user refine their request.
-4. **REJECT** — The query is clearly unrelated to House Majority training/policies (e.g., personal questions, general trivia, coding help, unrelated political topics).
+4. **REJECT** — The query is clearly unrelated to Hawaii State House Majority training/policies (e.g., personal questions, general trivia, coding help, unrelated political topics, U.S. Congress / federal-only matters).
 
 DECISION RULES:
-- If the query mentions anything about House rules, procedures, training, onboarding, staff policies, ethics, legislative process, committee operations, floor procedures, or any internal House Majority operations → CONFIRM
+- If the query mentions anything about Hawaii State House rules, procedures, training, onboarding, staff policies, ethics, legislative process, committee operations, floor procedures, or any internal Hawaii State House Majority operations → CONFIRM
 - If the query is broad but could plausibly relate to training docs (e.g., "tell me about orientation", "what are the rules") → CONFIRM with enrichment
 - If the query is conversational (e.g., "hello", "hi", "thanks", "what can you do", "who are you", "good morning") → CHAT
 - If the query is too vague to tell (e.g., "help", single words that aren't greetings) → CLARIFY
 - If the query is clearly off-topic (e.g., "what's the weather", "write me a poem", "explain quantum physics") → REJECT
 
 WHEN PROCEEDING — Enrich the query:
-- ALWAYS frame the enriched query explicitly in the context of the House Majority Staff Office. Every sub-question should reference House Majority training, policies, or procedures.
+- ALWAYS frame the enriched query explicitly in the context of the Hawaii State House Majority Staff Office. Every sub-question should reference Hawaii State House training, policies, or procedures.
 - Identify the core intent behind the question.
 - Infer what kind of training document, policy, or procedure the user is likely asking about.
-- Expand abbreviations or shorthand (e.g., "HR" → "House Rules", "CBO" → "Congressional Budget Office").
-- Add organizational context: specify which House Majority policies, training modules, or procedural areas are likely relevant.
-- Break broad questions into 2-4 specific, searchable sub-questions that are grounded in House Majority operations.
+- Expand Hawaii State Legislature abbreviations (e.g., "HR" → "House Resolution", "HB" → "House Bill", "HCR" → "House Concurrent Resolution", "HRS" → "Hawaii Revised Statutes", "LRB" → "Legislative Reference Bureau"). Do NOT expand using federal terminology — "HR" here is a House Resolution, not a U.S. House Rule, and there is no "CBO" at the state level.
+- Add organizational context: specify which Hawaii State House Majority policies, training modules, or procedural areas are likely relevant.
+- Break broad questions into 2-4 specific, searchable sub-questions that are grounded in Hawaii State House Majority operations.
 - The enriched query will be passed directly to downstream research agents, so make it detailed and actionable.
 
 OUTPUT FORMAT — You MUST respond with ONLY a JSON object, no other text:
@@ -140,6 +140,6 @@ async def run_intent_orchestrator(
     return IntentResponse(
         action="clarify",
         enrichedQuery="",
-        message="Could you please rephrase your question? I'm here to help with House Majority training documents, policies, and procedures.",
+        message="Could you please rephrase your question? I'm here to help with Hawaii State House Majority training documents, policies, and procedures.",
         logs=logs,
     )

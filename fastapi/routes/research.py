@@ -23,7 +23,7 @@ async def research(req: SearchRequest):
     enriched_query = req.query
     if req.context:
         enriched_query = (
-            f"INTENT ANALYSIS (use this to guide your research — all queries relate to House Majority Staff Office):\n"
+            f"INTENT ANALYSIS (use this to guide your research — all queries relate to the Hawaii State House Majority Staff Office):\n"
             f"{req.context}\n\nUSER QUESTION:\n{req.query}"
         )
 

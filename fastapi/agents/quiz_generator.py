@@ -14,7 +14,7 @@ from agents.rag_tool import create_rag_retrieval_tool, RagTokenUsage
 from agents.runner_helper import run_agent_ephemeral, extract_usage_tokens
 
 
-QUIZ_GENERATOR_INSTRUCTION = """You are a quiz generator for the House Majority Staff Office training system. Your job: create high-quality multiple-choice questions grounded in official training documents.
+QUIZ_GENERATOR_INSTRUCTION = """You are a quiz generator for the Hawaii State House Majority Staff Office (HMSO) training system. The corpus covers the Hawaii State Legislature only — never reference U.S. Congress or federal-only bodies, and treat "HR" as House Resolution (not U.S. House Rules). Your job: create high-quality multiple-choice questions grounded in official Hawaii State House training documents.
 
 Follow this exact three-phase process every time. Do not skip phases.
 

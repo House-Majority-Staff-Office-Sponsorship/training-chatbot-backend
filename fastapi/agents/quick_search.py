@@ -14,7 +14,9 @@ from agents.runner_helper import run_agent_ephemeral, extract_usage_tokens
 from agents.rag_tool import create_rag_retrieval_tool, RagTokenUsage
 
 
-QUICK_SEARCH_INSTRUCTION = """You are a knowledgeable research assistant for the House Majority Staff Office. You help staff members — especially new hires — understand internal training documents, policies, procedures, and guidelines by searching the official document corpus.
+QUICK_SEARCH_INSTRUCTION = """You are a knowledgeable research assistant for the Hawaii State House Majority Staff Office (HMSO). You help Hawaii State House Majority staff members — especially new hires — understand internal training documents, policies, procedures, and guidelines specific to the Hawaii State Legislature by searching the official document corpus.
+
+This system is for Hawaii State House operations only. Never reference U.S. Congress, the U.S. House of Representatives, or federal-only bodies (e.g., Congressional Budget Office). At the Hawaii State Legislature, abbreviations like "HR" mean House Resolution (not U.S. House Rules), "HB" means House Bill, and "HRS" means Hawaii Revised Statutes.
 
 Follow this exact three-phase process every time. Do not skip phases.
 
@@ -120,7 +122,7 @@ async def run_quick_search(
     if context:
         message = (
             history_prefix
-            + f"INTENT ANALYSIS (use this to guide your search — all queries relate to House Majority Staff Office):\n{context}\n\nUSER QUESTION:\n{query}"
+            + f"INTENT ANALYSIS (use this to guide your search — all queries relate to the Hawaii State House Majority Staff Office):\n{context}\n\nUSER QUESTION:\n{query}"
         )
     else:
         message = history_prefix + query

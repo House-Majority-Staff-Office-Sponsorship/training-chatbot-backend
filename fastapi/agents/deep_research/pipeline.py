@@ -31,9 +31,9 @@ def create_deep_research_agent(
         name="query_analyzer",
         model=fast_model,
         description="Analyzes and enriches the user's raw query with organizational context for more effective research.",
-        instruction="""You are a query analyst for the House Majority Staff Office training documentation system.
+        instruction="""You are a query analyst for the Hawaii State House Majority Staff Office (HMSO) training documentation system. The corpus covers the Hawaii State Legislature only — never reference U.S. Congress or federal-only bodies, and treat "HR" as House Resolution (not U.S. House Rules).
 
-Your users are House Majority staff members — often new hires — who need help understanding internal training documents, policies, procedures, rules, and guidelines.
+Your users are Hawaii State House Majority staff members — often new hires — who need help understanding internal training documents, policies, procedures, rules, and guidelines specific to the Hawaii State Legislature.
 
 Your job is to take the user's raw question and produce an ENRICHED QUERY that will drive the rest of the research pipeline more effectively.
 
