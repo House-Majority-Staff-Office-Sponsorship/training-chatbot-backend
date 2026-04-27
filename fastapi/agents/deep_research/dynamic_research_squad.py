@@ -165,22 +165,35 @@ Then write the findings. They must be:
 ── SOURCING RULES (READ CAREFULLY) ──────────────────────────────────
 The retrieve_from_rag tool returns RAW chunks from a JSONL corpus. Each chunk is delimited and shown with a header like "[Chunk 3] | score=0.812 | file=<name>" followed by the chunk's raw text. The raw text often contains structured fields the ingestion pipeline wrote into the JSONL — look for them.
 
-CRITICAL: NEVER cite the bulk corpus filename (e.g., "parsed-new-docs.jsonl", any "*.jsonl", or any "*.parquet" filename). That is just the bulk container — it is NOT a citation. Always parse the chunk text for the real source.
+You MUST parse the chunk text. These three fields are REQUIRED in every citation:
+1. "title"       → Document Title (NEVER use "source_file" as the title)
+2. "source_file" → filename only, after the last "/" (e.g. "HouseAdminManual.pdf")
+3. "page_or_slide" or "pg" → page number(s)
 
-You MUST parse the chunk text to extract the authoring reference. In priority order, cite:
-1. Page number (e.g., "page": 3, "pg": 3, or inline "p. 3", "Page 3") combined with the document title parsed from the chunk content — NOT the raw file name.
-2. Section / chapter / heading mentioned inside the chunk text.
-3. Policy, statute, or rule identifier quoted in the chunk (e.g., "HRS §84-13", "House Rule 11.7", "Hawaii Administrative Rules §3-122-29").
-4. Effective date, revision number, or official URL (especially capitol.hawaii.gov, hawaii.gov links) present inside the content.
+If also present in the chunk, append these to the citation:
+4. Section / chapter / heading mentioned inside the chunk text.
+5. Policy or rule identifier (e.g., "House Rule XXIII", "§5.301", "Policy 4.2.1")
+6. Effective date, revision number, or official URL
+
+Only fall back to the `file=` header value when the chunk's own text contains no usable reference.
 
 Examples of what to scan FOR inside the chunk text:
-- JSON-style fields: "page": 3, "section": "Drafting Process", "document": "...", "title": "...", "url": "...", "date": "2024-..."
+- JSON-style fields: "page": 3, "section": "Drafting Process", "document": "...", "url": "...", "date": "2024-..."
 - Inline statutory or rule identifiers (e.g., "HRS §84-13", "Hawaii Revised Statutes Chapter 84", "House Rule 11.7", "§3-122-29")
 - Section/subsection headings embedded in the text
-- Document titles mentioned inline (e.g., "House Majority Staff Handbook, Chapter 3", "Hawaii State Capitol Operations Manual")
-- URLs to capitol.hawaii.gov, ethics.hawaii.gov, lrb.hawaii.gov, or other official Hawaii sources
+- Document titles mentioned inline (e.g., "Member's Handbook, Chapter 3")
 
-If the chunk text genuinely has no parseable reference, write "internal training corpus (no inline reference)". Do NOT cite the JSONL filename.
+Group all pages from the same source_file into ONE bullet, sorted numerically.
+Never repeat a source_file as multiple bullets.
+Never cite a .jsonl or .parquet filename under any circumstance.
+Always print the OneDrive link as the first bullet, exactly once, then one bullet per source file below it.
+
+## Sources
+[One line only]:
+- View source material in this [OneDrive](https://urldefense.com/v3/__https://hicapitol-my.sharepoint.com/:f:/g/personal/v_chang_capitol_hawaii_gov/IgAVUIuYucTSSaVHDDu2MhudAQoUBjtH2IXaqVwZzQwTuzA?e=5*3a8x0g5c&at=9__;JQ!!PvDODwlR4mBZyAb0!UWgRT2IIodftKRQhs9W0YkJHC-kIaX3djTkVP2NlaRgdDfQ2ze5Sub58yMv3F1PcyMYV9VwtU4ACP8EigUIsxKtTmA$)
+
+[Then one bullet per unique source_file]:
+- [Title], pp. [pages], [section / policy ID / date if present] — `[filename]`
 
 ── FORMATTING ───────────────────────────────────────────────────────
 Plain text only. No markdown, no headers, no bold, no bullets. Use simple numbered lists or line breaks. The final report composer will handle formatting.
@@ -191,11 +204,19 @@ REFERENCES:
 Reference parsed from chunk text (e.g., "Overview of the Legislative Process, p. 3")
 Reference parsed from chunk text (https://example-url-from-chunk-if-present.com)
 
+── DISCLAIMER (REQUIRED) ────────────────────────────────────────────
+Always append the following disclaimer at the very end of every response, after the Sources section, exactly as written:
+
+> ⚠️ **Always verify important information with the source material, appropriate supervisor, or administrative staff before acting on it.**
+> 
+> 💡 *You may need to refresh your browser's page if responses are taking too long to generate.*
+
 ── HARD RULES ───────────────────────────────────────────────────────
 - Never output your planning — plans stay internal.
 - Never reference the search process, your tools, or your limitations.
 - Quote key definitions and thresholds verbatim using quotation marks.
-- Preserve exact numbers, dates, and identifiers.""",
+- Preserve exact numbers, dates, and identifiers.
+- Always end every response that references the corpus with the disclaimer exactly as specified in the DISCLAIMER section. Never omit it.""",
             tools=[rag_tool],
             output_key="question_findings",
         )
