@@ -208,8 +208,6 @@ Reference parsed from chunk text (https://example-url-from-chunk-if-present.com)
 Always append the following disclaimer at the very end of every response, after the Sources section, exactly as written:
 
 > ⚠️ **Always verify important information with the source material, appropriate supervisor, or administrative staff before acting on it.**
-> 
-> 💡 *You may need to refresh your browser's page if responses are taking too long to generate.*
 
 ── HARD RULES ───────────────────────────────────────────────────────
 - Never output your planning — plans stay internal.

@@ -96,8 +96,6 @@ Print the "View source material in this OneDrive" line only once at the top of t
 Always append the following disclaimer at the very end of every response, after the Sources section, exactly as written:
 
 > ⚠️ **Always verify important information with the source material, appropriate supervisor, or administrative staff before acting on it.**
-> 
-> 💡 *You may need to refresh your browser's page if responses are taking too long to generate.*
 
 ── HARD RULES ───────────────────────────────────────────────────────
 - Never output your planning — plans stay internal.
@@ -158,6 +156,7 @@ async def run_escalation_search(
     message += f"PREVIOUS ANSWER (the user was NOT satisfied with this):\n---\n{previous_answer}\n---\n\nUSER QUESTION:\n{query}"
 
     answer = ""
+    last_text = ""  # fallback if output_key state delta never lands
     logs: list[LogEntry] = []
 
     async for event in run_agent_ephemeral(agent, message, user_id="escalation-search-user", app_name="escalation_app"):
@@ -185,5 +184,17 @@ async def run_escalation_search(
             if "escalation_answer" in state_delta:
                 answer = str(state_delta["escalation_answer"])
 
+            # Fallback: capture any final text from the model in case the
+            # output_key state delta never fires (partial output, weird
+            # finish_reason, etc.). We keep overwriting so the LAST text
+            # seen wins, which matches the agent's final response.
+            content = getattr(event, "content", None)
+            parts = getattr(content, "parts", None) if content else None
+            if parts:
+                text_chunks = [getattr(p, "text", "") for p in parts if getattr(p, "text", None)]
+                joined = "".join(text_chunks).strip()
+                if joined:
+                    last_text = joined
+
     all_logs = sorted(logs + rag_logs, key=lambda l: l.timestamp)
-    return SearchResponse(answer=answer or "(no answer produced)", logs=all_logs)
+    return SearchResponse(answer=answer or last_text or "(no answer produced)", logs=all_logs)
