@@ -1,10 +1,10 @@
 # training-chatbot-backend
 
-Next.js API backend for a RAG-assisted multi-agent research chatbot built with Google's [Agent Development Kit (ADK)](https://github.com/google/adk-node). Designed for the House Majority Staff Office to help staff members query internal training documents, policies, and procedures.
+FastAPI backend for a RAG-assisted multi-agent research chatbot built with Google's [Agent Development Kit (ADK)](https://github.com/google/adk-python). Designed for the Hawaii State House Majority Staff Office to help staff members query internal training documents, policies, and procedures.
 
 ## Architecture
 
-All user queries flow through an **Intent Orchestrator** first, which validates relevance and enriches the query before routing to either a quick search, deep research pipeline, or conversational response.
+All user queries flow through an **Intent Orchestrator** first, which validates relevance and enriches the query before routing to the appropriate agent.
 
 ```
 User Query
@@ -12,50 +12,82 @@ User Query
     v
 Intent Orchestrator (Flash)
     |
-    ├── Conversational (Flash)     — auto-routed for greetings/small talk
-    ├── Quick Search (Flash)       — single-agent RAG search
-    ├── Quick Search (Pro)         — single-agent RAG search with pro model
-    └── Deep Research (Flash+Pro)  — multi-agent pipeline
+    ├── Conversational (Flash)         — auto-routed for greetings/small talk
+    ├── Quick Search (Flash)           — single-agent RAG search
+    ├── Quick Search Pro (Pro)         — single-agent RAG search, higher quality
+    ├── Search Escalate (Pro)          — re-runs deeper after an unsatisfactory Flash answer
+    ├── Quiz Generator (Flash)         — generates multiple-choice quizzes from the corpus
+    └── Deep Research (Flash + Pro)    — multi-agent pipeline
             ├── Query Analyzer (Flash)
             ├── Question Expander (Flash)
-            ├── Dynamic Research Squad (Flash) — 5 parallel researchers
+            ├── Dynamic Research Squad (Flash) — N parallel researchers
             └── Research Compiler (Pro)
 ```
 
 All routes accept an optional `conversationHistory` parameter for multi-turn context.
 
+## Project structure
+
+```
+.
+├── Dockerfile                  # Builds & runs the FastAPI app
+├── .env / .env.example         # Environment configuration
+├── fastapi/
+│   ├── main.py                 # FastAPI app entry, middleware, root docs page, /api/warmup
+│   ├── config.py               # Centralised env loading (.env + ADC)
+│   ├── models.py               # Pydantic request/response models
+│   ├── requirements.txt
+│   ├── middleware/
+│   │   ├── auth.py             # x-api-key gate
+│   │   └── rate_limiter.py     # Sliding-window rate limiter
+│   ├── routes/
+│   │   ├── intent.py           # POST /api/intent
+│   │   ├── conversational.py   # POST /api/conversational
+│   │   ├── quick_search.py     # POST /api/quick-search
+│   │   ├── quick_search_pro.py # POST /api/quick-search-pro
+│   │   ├── search_escalate.py  # POST /api/search-escalate
+│   │   ├── research.py         # POST /api/research (SSE)
+│   │   └── quiz.py             # POST /api/quiz
+│   ├── agents/
+│   │   ├── intent_orchestrator.py
+│   │   ├── conversational.py
+│   │   ├── quick_search.py
+│   │   ├── escalation_search.py
+│   │   ├── quiz_generator.py
+│   │   ├── rag_tool.py         # Vertex AI RAG retrieval (raw chunks)
+│   │   ├── runner_helper.py    # InMemoryRunner ephemeral session helper
+│   │   └── deep_research/
+│   │       ├── pipeline.py
+│   │       ├── dynamic_research_squad.py
+│   │       └── runner.py
+│   └── adk_agents/             # Standalone wrappers for `adk web` testing
+└── migration/                  # Historical migration notes
+```
+
 ## Authentication & CORS
 
-All API routes are protected with two layers:
+Two layers protect every API route:
 
-1. **CORS origin check** — Only requests from origins listed in `ALLOWED_ORIGINS` (or with no `Origin` header, i.e. same-origin/server-side) are allowed. Unauthorized origins receive a `403`.
-2. **API key** — All cross-origin requests must include a valid `x-api-key` header matching the `API_KEY` environment variable. Missing or invalid keys receive a `401`. Same-origin requests (from the built-in UI) skip this check since the key is passed from the server component.
-
-**Headers required for external consumers:**
-```
-Content-Type: application/json
-x-api-key: <your-api-key>
-```
+1. **CORS origin check** — only requests from origins listed in `ALLOWED_ORIGINS` (or with no `Origin` header) are allowed.
+2. **API key** — all requests must include a valid `x-api-key` header matching the `API_KEY` env var. The `/`, `/docs`, and `/api/warmup` paths are exempt.
 
 **Example:**
 ```bash
-curl -X POST https://training-chatbot-backend.vercel.app/api/intent \
+curl -X POST https://your-host/api/intent \
   -H "Content-Type: application/json" \
   -H "x-api-key: your-api-key-here" \
   -d '{"query": "test"}'
 ```
 
-The frontend app (`training-chatbot-frontend`) uses a server-side proxy that reads `BACKEND_API_KEY` from its own environment and injects the `x-api-key` header before forwarding requests — the key is never exposed to the browser.
+The frontend (`training-chatbot-frontend`) uses a server-side proxy that injects `x-api-key` from its own env so the key never reaches the browser.
 
-## API Routes
+## API routes
 
-### Conversation History
-
-Every route accepts an optional `conversationHistory` array in the request body. This allows the agents to reference prior turns for context-aware responses.
+Every POST route accepts an optional `conversationHistory` array:
 
 ```json
 {
-  "query": "what about the ethics rules?",
+  "query": "what about ethics rules?",
   "conversationHistory": [
     { "role": "user", "content": "tell me about onboarding" },
     { "role": "assistant", "content": "House Majority onboarding covers..." }
@@ -63,212 +95,112 @@ Every route accepts an optional `conversationHistory` array in the request body.
 }
 ```
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `conversationHistory` | `Array<{ role: "user" \| "assistant", content: string }>` | Optional. Prior conversation turns for context. |
+| Route | Method | Description |
+|-------|--------|-------------|
+| `/` | GET | API documentation page (auth-exempt) |
+| `/api/warmup` | GET | Lightweight ping; warms ADC + Vertex on first hit (auth-exempt) |
+| `/api/intent` | POST | Validates and enriches the query; returns `confirm` / `chat` / `clarify` / `reject` |
+| `/api/conversational` | POST | Greetings, small talk, system-capability questions (no RAG) |
+| `/api/quick-search` | POST | Single-pass RAG search using the Flash model |
+| `/api/quick-search-pro` | POST | Single-pass RAG search using the Pro model |
+| `/api/search-escalate` | POST | Re-runs the search deeper (5 sub-queries, Pro model) when the user marks the Flash answer unsatisfactory. Body adds `previousAnswer: string`. |
+| `/api/research` | POST (SSE) | Full deep-research pipeline; streams events |
+| `/api/quiz` | POST | Generates a structured multiple-choice quiz on a topic |
 
----
-
-### `POST /api/intent`
-
-Gatekeeper that validates and enriches user queries before research begins.
-
-**Request:**
-```json
-{ "query": "tell me about drafting procedures", "conversationHistory": [] }
-```
-
-**Response:**
-```json
-{
-  "action": "confirm",
-  "enrichedQuery": "Detailed analysis with House Majority context and sub-questions...",
-  "message": "You're asking about legislative drafting procedures. Shall I proceed?",
-  "logs": [{ "agent": "intent_orchestrator", "promptTokens": 771, "responseTokens": 218, ... }]
-}
-```
-
-| Field | Description |
-|-------|-------------|
-| `action` | `"confirm"` (proceed), `"chat"` (conversational), `"clarify"` (need more info), or `"reject"` (off-topic) |
-| `enrichedQuery` | Contextualized query for downstream agents (empty for chat/clarify/reject) |
-| `message` | User-facing message (empty for chat — use `/api/conversational` instead) |
-| `logs` | Token usage logs from the agent |
-
----
-
-### `POST /api/conversational`
-
-Simple conversational agent — no RAG search. Handles greetings, small talk, and system capability questions. Auto-routed when the intent orchestrator returns `action: "chat"`.
-
-**Request:**
-```json
-{ "query": "hello", "conversationHistory": [] }
-```
-
-**Response:**
-```json
-{
-  "answer": "Hello! I'm the House Majority Training Assistant. I can help you...",
-  "logs": [{ "agent": "conversational_agent", "promptTokens": 200, "responseTokens": 50, ... }]
-}
-```
-
----
-
-### `POST /api/quick-search`
-
-Single-pass search using one LlmAgent (Flash) with a RAG tool. Fast and cost-effective.
-
-**Request:**
-```json
-{ "query": "what are the travel reimbursement rules?", "context": "optional enriched context", "conversationHistory": [] }
-```
-
-**Response:**
-```json
-{
-  "answer": "Staff travel reimbursement is governed by...\n\n## Sources\n...",
-  "logs": [
-    { "agent": "quick_search_agent", "promptTokens": 500, "responseTokens": 30, ... },
-    { "agent": "retrieve_from_rag", "promptTokens": 12, "responseTokens": 150, ... }
-  ]
-}
-```
-
----
-
-### `POST /api/quick-search-pro`
-
-Identical to `/api/quick-search` but uses the Pro model (`gemini-2.5-pro`). More reliable at following instructions and producing higher-quality answers, but slower and more expensive.
-
-Same request/response format as `/api/quick-search`.
-
----
-
-### `POST /api/research`
-
-Multi-agent deep research pipeline. Returns a **Server-Sent Events (SSE)** stream for real-time progress updates.
-
-**Request:**
-```json
-{ "query": "tell me about drafting procedures", "context": "optional enriched context", "conversationHistory": [] }
-```
-
-**SSE Events:**
+### Deep research SSE events
 
 | Event | Payload | Description |
 |-------|---------|-------------|
-| `log` | `{ agent, message, promptTokens, responseTokens, totalTokens, timestamp, researcherIndex? }` | Token usage for each agent/tool call |
-| `step` | `{ field, value }` | Pipeline step completed (enrichedQuery, researchQuestions, answer) |
-| `researchers_init` | `{ count, labels }` | Number and names of parallel researchers spawned |
-| `researcher_done` | `{ index, label, value }` | Individual researcher completed with findings |
+| `log` | `{ agent, message, promptTokens, responseTokens, totalTokens, timestamp, researcherIndex? }` | Per-agent / per-tool token usage |
+| `step` | `{ field, value }` | Pipeline step completed (`enrichedQuery`, `researchQuestions`, `answer`) |
+| `researchers_init` | `{ count, labels }` | Names of parallel researchers |
+| `researcher_done` | `{ index, label, value }` | A researcher finished |
 | `error` | `{ error, detail }` | Pipeline error |
 | `done` | `{}` | Stream complete |
 
-**Pipeline stages:**
-
-1. **Query Analyzer** (Flash) — enriches the raw user query with organizational context
-2. **Question Expander** (Flash) — generates exactly 5 targeted research sub-questions
-3. **Dynamic Research Squad** (Flash) — spawns one researcher per question, all running in parallel. Each researcher makes 3-5 RAG corpus queries and synthesizes findings.
-4. **Research Compiler** (Pro) — compiles all findings into a structured report with executive summary and sources
-
 ## Agents
 
-| Agent | Model | Role |
-|-------|-------|------|
-| `intent_orchestrator` | Flash | Validates relevance, enriches queries, gates access, routes conversational queries |
-| `conversational_agent` | Flash | Handles greetings, small talk, and system capability questions (no tools) |
-| `quick_search_agent` | Flash or Pro | Single-pass RAG search and answer synthesis |
-| `query_analyzer` | Flash | Enriches raw queries with organizational context |
-| `question_expander` | Flash | Breaks enriched query into 5 sub-questions |
-| `dynamic_research_squad` | Flash | Spawns parallel researchers with RAG tools |
-| `research_compiler` | Pro | Compiles all research into final report with sources |
+| Agent | Model env var | Role |
+|-------|---------------|------|
+| `intent_orchestrator` | `GEN_FAST_MODEL` | Validates relevance, enriches queries, routes conversational queries |
+| `conversational_agent` | `GEN_FAST_MODEL` | Greetings, small talk (no tools) |
+| `quick_search_agent` | `GEN_FAST_MODEL` (Flash) or `GEN_PRO_MODEL` (Pro) | Single-pass RAG search |
+| `escalation_search_agent` | `GEN_PRO_MODEL` | Deeper re-search after unsatisfactory Flash answer |
+| `quiz_generator` | `GEN_FAST_MODEL` | Structured quiz JSON output |
+| Deep research pipeline | `GEN_FAST_MODEL` + `GEN_REPORT_MODEL` | Multi-agent: analyzer → expander → parallel researchers → compiler |
 
-## Project Structure
+Each RAG-using agent follows a three-phase pattern: **plan internally → exactly N retrievals → plan output → answer**, and parses real source references (page numbers, policy IDs, URLs) directly from the retrieved chunk text rather than the corpus filename.
 
-```
-app/
-  api/
-    intent/              — POST /api/intent (query validation)
-    conversational/      — POST /api/conversational (chat responses)
-    quick-search/        — POST /api/quick-search (Flash single-pass)
-    quick-search-pro/    — POST /api/quick-search-pro (Pro single-pass)
-    research/            — POST /api/research (deep research SSE stream)
-  lib/
-    types.ts              — Shared types (ConversationMessage, formatConversationHistory)
-    agents/
-      intent-orchestrator/  — Intent validation and query enrichment
-      conversational/       — Simple LLM chat agent (no tools)
-      quick-search/         — Single-agent RAG search
-      deep-research/
-        agent.ts              — Pipeline definition (SequentialAgent)
-        dynamic-research-squad.ts — Parallel researcher spawner (BaseAgent)
-        runner.ts             — Streaming and batch runners
-      shared-tools/
-        rag-tool.ts           — Vertex AI RAG FunctionTool with token tracking
-    rate-limiter.ts         — Sliding-window rate limiter
-  page.tsx                — Server component that passes API_KEY to HomeClient
-  HomeClient.tsx          — Dev UI with mode tabs and terminal log panel
-```
+## Environment variables
 
-## Environment Variables
-
-Copy `.env.example` to `.env.local` and fill in your values:
+Copy `.env.example` to `.env` and fill in your values.
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `GCP_PROJECT` | Yes | | Google Cloud project ID |
-| `GCP_LOCATION` | | `us-central1` | Vertex AI region |
-| `GOOGLE_GENAI_USE_VERTEXAI` | | `TRUE` | Use Vertex AI backend (required for RAG) |
-| `GEN_FAST_MODEL` | | `gemini-2.0-flash` | Flash model for intent, query analysis, researchers |
-| `GEN_REPORT_MODEL` | | `gemini-2.5-pro` | Pro model for research compiler and quick-search-pro |
-| `RAG_CORPUS` | Yes | | Full Vertex AI RAG corpus resource name |
-| `API_KEY` | Yes | | Secret key for `x-api-key` header validation |
+| `GCP_PROJECT` | Yes | — | Google Cloud project ID |
+| `GCP_LOCATION` | | `us-west1` | Vertex AI region for **models**. Use `global` for Gemini 3 previews. |
+| `GOOGLE_GENAI_USE_VERTEXAI` | | `TRUE` | Required for RAG corpus access |
+| `GEN_FAST_MODEL` | | `gemini-2.5-flash` | Fast model (intent, conversational, quick search, query analyzer) |
+| `GEN_REPORT_MODEL` | | `gemini-2.5-pro` | Report model (research compiler) |
+| `GEN_PRO_MODEL` | | `GEN_REPORT_MODEL` | Pro model (quick-search-pro, escalation) |
+| `RAG_CORPUS` | Yes | — | Full Vertex AI RAG corpus resource name |
+| `API_KEY` | Yes | — | Secret key for `x-api-key` header validation |
 | `ALLOWED_ORIGINS` | | `*` | Comma-separated CORS origins |
+| `GOOGLE_APPLICATION_CREDENTIALS_JSON` | | — | Single-line service-account JSON key, used when ADC isn't available (e.g. in containers) |
 
-`RAG_CORPUS` format: `projects/<PROJECT>/locations/<LOCATION>/ragCorpora/<CORPUS_ID>`
+`RAG_CORPUS` format: `projects/<PROJECT>/locations/<REGION>/ragCorpora/<CORPUS_ID>`. The RAG tool auto-detects the corpus's region from this URI, so models can run on `GCP_LOCATION=global` while the corpus lives in (e.g.) `us-west1`.
 
-## Conversation History
-
-All routes support multi-turn conversations via the `conversationHistory` parameter. This is formatted as a text prefix injected into the agent's user message, so each agent sees prior turns as context.
-
-- The **dev UI** (`page.tsx`) tracks history in-memory and sends it with every API call automatically
-- **External consumers** pass the array directly in the request body
-- History is per-session — it resets on page reload in the dev UI
-- Each successful response appends a user/assistant pair to the history
-
-## Token Tracking
-
-All agents and RAG tool calls report token usage:
-
-- **ADK agent events** — tracked via `event.usageMetadata` (promptTokenCount, candidatesTokenCount, totalTokenCount)
-- **RAG tool calls** — tracked via `onTokenUsage` callback from the Vertex AI `generateContent` response inside the FunctionTool
-- **Frontend log panel** — terminal-style display showing per-agent and per-researcher consolidated token counts
-
-Each deep research query typically involves:
-- 1 intent call
-- 1 query analyzer call
-- 1 question expander call
-- 5 researchers x (3-5 RAG queries + 4 LLM calls each) = ~35 API calls
-- 1 research compiler call
-
-## Local Development
+## Local development
 
 ```bash
-npm install
-cp .env.example .env.local  # fill in your values
-gcloud auth application-default login  # authenticate for Vertex AI
-npm run dev
+cd fastapi
+python3.12 -m venv .venv          # 3.10+ required (3.9 will fail)
+source .venv/bin/activate
+pip install -r requirements.txt
+
+# Auth: either of the two
+gcloud auth application-default login          # uses your user creds
+# — or paste the SA JSON into GOOGLE_APPLICATION_CREDENTIALS_JSON in .env
+
+uvicorn main:app --reload --port 3001
 ```
 
-Available at `http://localhost:3000` with a dev UI providing three modes:
-- **Quick Search (Flash)** — fast single-pass search
-- **Quick Search (Pro)** — higher quality single-pass search
-- **Deep Research (Flash + Pro)** — full multi-agent pipeline with streaming progress
+Open `http://localhost:3001/` for the API docs page.
 
-Conversational queries (greetings, small talk) are auto-routed by the intent orchestrator regardless of which mode is selected.
+### Testing individual agents with `adk web`
 
-## Deployment
+Each agent has a thin wrapper under `fastapi/adk_agents/` that exposes a `root_agent`. From inside `fastapi/`:
 
-Configured for Vercel (`vercel.json`). Push to the linked GitHub repo and Vercel builds automatically. Set environment variables in the Vercel project settings.
+```bash
+adk web adk_agents
+```
+
+This launches Google's ADK web UI; pick any agent from the dropdown to chat with it in isolation.
+
+## Deployment (Docker)
+
+The root `Dockerfile` builds the FastAPI app:
+
+```bash
+docker build -t hmso-training-backend .
+docker run --rm -p 3001:3001 --env-file .env hmso-training-backend
+```
+
+For Coolify or any container host, point at the repo root and use the existing `Dockerfile`. The container runs `uvicorn main:app` on port 3001.
+
+### Cold starts
+
+Heavy imports (`google-adk`, `vertexai`) make the first request slow on a cold container. Two mitigations are built in:
+
+- **Startup warmup** ([`fastapi/main.py`](fastapi/main.py)) — `@app.on_event("startup")` resolves Google ADC and calls `vertexai.init()` so the first real request doesn't pay that cost.
+- **`/api/warmup`** — auth-exempt GET endpoint the frontend can ping on page load to wake the container before the user sends a chat.
+
+If you're seeing cold-start 500s, configure your container host to keep at least one replica warm.
+
+## Token tracking
+
+All agent events and RAG tool calls report token usage. The helper `extract_usage_tokens(event)` in [`fastapi/agents/runner_helper.py`](fastapi/agents/runner_helper.py) safely coerces the various `usage_metadata` fields (some of which can be `None` on tool-only turns) to `int`. Every route returns a `logs` array with one entry per agent/tool call.
+
+## Conversation history
+
+Every route accepts an optional `conversationHistory` array. It's formatted into a text prefix injected into the agent's user message, so each agent sees prior turns as context. The frontend tracks history per-session and forwards it on every request.
